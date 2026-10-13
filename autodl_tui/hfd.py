@@ -16,6 +16,12 @@ from .config import redact
 
 # Pinned upstream script; the mirror and upstream URLs return the same bytes.
 HFD_SHA256 = "524894ef4f8e82da6180156a96bd9678d56d77e877b7f69a9d253da97d28866f"
+HFD_PATCHED_SHA256 = "4e5635db48951019fa88f513968e2873d2990ce692787d736bd39f7de4a095a5"
+INTEGER_PATCHES = (
+    ('print (n+0)" "(s+0)', 'printf "%.0f %.0f\\n", n, s'),
+    ('print want[q] "\\t" q', 'printf "%.0f\\t%s\\n", want[q], q'),
+    ('END { print b*512, d-a }', 'END { printf "%.0f %.0f\\n", b*512, d-a }'),
+)
 HFD_URLS = (
     "https://hf-mirror.com/hfd/hfd.sh",
     "https://gist.githubusercontent.com/padeoe/697678ab8e528b85a2a7bddafea1fa4f/raw/774ee6d344fb94438b1831d49ae83647c2d609ea/hfd.sh",
@@ -49,6 +55,24 @@ def log(state: Path, line: str) -> None:
         stream.write(redact(line) + "\n")
 
 
+def compatible_script(data: bytes) -> bytes:
+    """Keep awk's large byte counts decimal: Bash cannot calculate scientific notation."""
+    text = data.decode("utf-8")
+    for original, replacement in INTEGER_PATCHES:
+        if text.count(original) != 1:
+            raise ValueError("hfd 大文件兼容补丁与脚本版本不匹配")
+        text = text.replace(original, replacement)
+    return text.encode("utf-8")
+
+
+def save_script(path: Path, data: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".tmp")
+    with temporary.open("wb") as stream:
+        stream.write(data)
+    temporary.replace(path)
+
+
 async def script(client: httpx.AsyncClient, state: Path) -> Path:
     missing = [name for name in ("bash", "curl", "aria2c") if not shutil.which(name)]
     if missing:
@@ -57,19 +81,22 @@ async def script(client: httpx.AsyncClient, state: Path) -> Path:
     path = state / "tools" / "hfd.sh"
     if path.is_symlink():
         raise ValueError("hfd 脚本不可为符号链接")
-    if path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == HFD_SHA256:
-        return path
+    if path.is_file():
+        cached = path.read_bytes()
+        digest = hashlib.sha256(cached).hexdigest()
+        if digest == HFD_PATCHED_SHA256:
+            return path
+        if digest == HFD_SHA256:
+            save_script(path, compatible_script(cached))
+            log(state, "已修复缓存 hfd 的大文件整数统计；保留下载和 aria2 续传文件")
+            return path
     for url in HFD_URLS:
         try:
             response = await client.get(url)
             response.raise_for_status()
             if hashlib.sha256(response.content).hexdigest() != HFD_SHA256:
                 raise ValueError("hfd 脚本校验不匹配")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_suffix(".tmp")
-            with temporary.open("wb") as stream:
-                stream.write(response.content)
-            temporary.replace(path)
+            save_script(path, compatible_script(response.content))
             return path
         except (httpx.HTTPError, ValueError) as error:
             log(state, f"获取 hfd 失败：{url}：{error}")
@@ -118,6 +145,15 @@ def manifest_size(staging: Path, path: str) -> int:
     return int(entries[0][0])
 
 
+def repair_cached_totals(staging: Path, path: str) -> None:
+    total = manifest_size(staging, path)
+    if total:
+        # Old hfd may have already persisted "1 5.50634e+10". Use the exact manifest,
+        # not float conversion of that rounded string. The data and .aria2 stay untouched.
+        for name in ("repo_info", "filelist_stats"):
+            (staging / ".hfd" / name).write_text(f"1 {total}\n", encoding="utf-8")
+
+
 async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> None:
     url, _ = downloads.request(job.model)
     chosen = selection(job.model.url)
@@ -136,6 +172,7 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
         raise ValueError("hfd 临时文件指向下载目录之外")
     if source.is_symlink() or Path(str(source) + ".aria2").is_symlink():
         raise ValueError("hfd 临时文件不可为符号链接")
+    repair_cached_totals(staging, path)
     env = dict(os.environ)
     env["HF_ENDPOINT"] = endpoint
     for key in ("HF_TOKEN", "HUGGING_FACE_HUB_TOKEN", "HF_USERNAME"):

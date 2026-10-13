@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import json
 import shlex
+import subprocess
 import sys
 from pathlib import Path
 
@@ -185,8 +186,10 @@ def test_progress_and_hfd_path_validation():
 
 async def test_script_bootstrap_checksum_fallback_and_cache(downloads, monkeypatch):
     # Exercise fetching without executing the fetched bytes.
-    data = b"#!/bin/bash\nexit 0\n"
+    data = ("#!/bin/bash\n" + "\n".join("# " + original for original, _ in hfd.INTEGER_PATCHES)).encode()
     monkeypatch.setattr(hfd, "HFD_SHA256", hashlib.sha256(data).hexdigest())
+    patched = hfd.compatible_script(data)
+    monkeypatch.setattr(hfd, "HFD_PATCHED_SHA256", hashlib.sha256(patched).hexdigest())
     monkeypatch.setattr(hfd.shutil, "which", lambda name: "/bin/" + name)
     calls = []
 
@@ -196,9 +199,58 @@ async def test_script_bootstrap_checksum_fallback_and_cache(downloads, monkeypat
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         path = await hfd.script(client, downloads.config.state)
-        assert path.read_bytes() == data
+        assert path.read_bytes() == patched
         assert await hfd.script(client, downloads.config.state) == path
     assert len(calls) == 2
+
+
+async def test_cached_upstream_script_is_patched_without_network(downloads, monkeypatch):
+    data = ("#!/bin/bash\n" + "\n".join("# " + original for original, _ in hfd.INTEGER_PATCHES)).encode()
+    monkeypatch.setattr(hfd, "HFD_SHA256", hashlib.sha256(data).hexdigest())
+    monkeypatch.setattr(hfd.shutil, "which", lambda name: "/bin/" + name)
+    path = downloads.config.state / "tools/hfd.sh"
+    path.parent.mkdir(parents=True)
+    path.write_bytes(data)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: pytest.fail("must reuse cached script"))) as client:
+        assert await hfd.script(client, downloads.config.state) == path
+    assert path.read_bytes() == hfd.compatible_script(data)
+
+
+def test_large_file_awk_statistics_are_exact_bash_integers():
+    stats = hfd.INTEGER_PATCHES[0][1]
+    result = subprocess.run(["awk", '-F\t', '{n++; s+=$1} END {' + stats + '}'],
+                            input="55063448064\tfirst.gguf\n28800138432\tsecond.gguf\n",
+                            text=True, capture_output=True, check=True)
+    assert result.stdout == "2 83863586496\n"
+    monitor = hfd.INTEGER_PATCHES[2][1]
+    result = subprocess.run(["awk", '{b+=$1; d++} ' + monitor], input="107545797\n1\n",
+                            text=True, capture_output=True, check=True)
+    assert result.stdout == "55063448576 2\n"
+    calculation = subprocess.run(["bash", "-c", 'read now files; total=83863586496; echo "$((now*100/total))"'],
+                                 input=result.stdout, text=True, capture_output=True, check=True)
+    assert calculation.stdout == "65\n"
+    needed = hfd.INTEGER_PATCHES[1][1]
+    result = subprocess.run(["awk", '{want["file.gguf"]=$1; q="file.gguf"; ' + needed + '}'],
+                            input="55063448064\n", text=True, capture_output=True, check=True)
+    assert result.stdout == "55063448064\tfile.gguf\n"
+
+
+def test_cached_scientific_totals_repaired_without_touching_resume(tmp_path):
+    meta = tmp_path / ".hfd"
+    meta.mkdir()
+    (meta / "manifest").write_text("55063448064\tIQ3_S/model.gguf\n")
+    for name in ("repo_info", "filelist_stats"):
+        (meta / name).write_text("1 5.50634e+10\n")
+    source = tmp_path / "IQ3_S/model.gguf"
+    source.parent.mkdir()
+    source.write_bytes(b"downloaded-prefix")
+    control = Path(str(source) + ".aria2")
+    control.write_bytes(b"aria2-control")
+    hfd.repair_cached_totals(tmp_path, "IQ3_S/model.gguf")
+    for name in ("repo_info", "filelist_stats"):
+        assert (meta / name).read_text() == "1 55063448064\n"
+    assert source.read_bytes() == b"downloaded-prefix"
+    assert control.read_bytes() == b"aria2-control"
 
 
 async def test_missing_dependencies_actionable_error(downloads, monkeypatch):
