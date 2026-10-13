@@ -58,7 +58,7 @@ PYCONFIG
     fi
 fi
 
-if [[ ! -x .venv/bin/python ]]; then
+if [[ ! -x .venv/bin/python ]] || ! .venv/bin/python -m pip --version >/dev/null 2>&1; then
     "$python_bin" -m venv .venv || {
         echo '创建环境失败。请使用 Linux Python 3.10+ 环境，或安装 python3-venv。' >&2
         exit 1

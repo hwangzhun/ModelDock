@@ -12,6 +12,12 @@
 curl -fsSL https://raw.githubusercontent.com/hwangzhun/ModelDock/main/install.sh -o /tmp/modeldock-install.sh && bash /tmp/modeldock-install.sh
 ```
 
+没有 curl 时可以使用 wget：
+
+```bash
+wget -qO /tmp/modeldock-install.sh https://raw.githubusercontent.com/hwangzhun/ModelDock/main/install.sh && bash /tmp/modeldock-install.sh
+```
+
 安装器从 GitHub 获取源码，安装到 `~/.local/share/modeldock/app`，创建 `~/.local/bin/modeldock` 启动器并打开 TUI。下载脚本再运行可以保留终端标准输入；也支持 `curl -fsSL URL | bash`，脚本会重新连接 `/dev/tty`。
 
 以后启动：
