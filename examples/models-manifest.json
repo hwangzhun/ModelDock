@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+      "filename": "sd_xl_base_1.0.safetensors",
+      "category": "checkpoints",
+      "sha256": ""
+    }
+  ]
+}

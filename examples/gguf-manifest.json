@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "url": "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "filename": "qwen2.5-0.5b-instruct-q4_k_m.gguf",
+      "category": "gguf",
+      "sha256": ""
+    }
+  ]
+}

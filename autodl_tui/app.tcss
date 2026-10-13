@@ -1,0 +1,54 @@
+Screen {
+    background: #0c1420;
+    color: #d8e4ef;
+}
+Header { background: #142338; color: #ddf7fa; }
+Footer { background: #142338; }
+#brand { height: 3; padding: 1 2; color: #6ee7d1; text-style: bold; }
+TabbedContent { height: 1fr; }
+TabPane { padding: 1 2; }
+Tabs { background: #101d2d; }
+Tab.-active { color: #6ee7d1; text-style: bold; }
+VerticalScroll { height: 1fr; }
+.card { background: #142133; border: round #2b4059; padding: 1 2; height: auto; }
+.eyebrow { color: #8ea6bf; height: 1; margin-bottom: 1; }
+.muted { color: #8ea6bf; height: auto; }
+#hero { height: auto; min-height: 9; }
+#service-card { width: 1fr; margin-right: 1; min-height: 9; }
+#workspace-card { width: 1fr; min-height: 9; }
+#service-status { color: #6ee7d1; text-style: bold; height: 2; }
+#service-detail, #workspace-path { height: auto; }
+.buttons { height: auto; min-height: 3; margin: 1 0; layout: horizontal; }
+Button { min-width: 10; margin-right: 1; background: #1c3047; border: tall #1c3047; }
+Button.-primary { background: #117d76; border: tall #117d76; color: #ffffff; }
+Button:hover { border: tall #6ee7d1; }
+#activity { height: auto; min-height: 2; color: #e2c78e; margin: 0 0 1 0; }
+#metrics { height: auto; min-height: 8; }
+.metric { width: 1fr; min-height: 8; margin-right: 1; }
+.metric:last-of-type { margin-right: 0; }
+#cpu-metric, #ram-metric, #disk-metric { color: #eaf5ff; text-style: bold; height: auto; }
+#gpu-card { margin-top: 1; min-height: 7; }
+#gpu-metric { height: auto; }
+#network-metric { margin: 1 0; height: 1; color: #8ea6bf; }
+#steps { margin-top: 1; height: 2; color: #6ee7d1; }
+.hint { color: #8ea6bf; height: auto; margin-bottom: 1; }
+.section-title { text-style: bold; color: #6ee7d1; height: 2; margin-top: 1; }
+#download-table { height: 1fr; min-height: 5; background: #101d2d; }
+DataTable > .datatable--header { background: #1c3047; color: #c4d7e9; }
+DataTable > .datatable--cursor { background: #1a5d63; }
+#download-detail { height: 3; margin-top: 1; color: #e2c78e; }
+#log-toolbar { height: 3; margin-bottom: 1; }
+#log-source { width: 32; margin-right: 2; }
+#log-toolbar Label { padding-top: 1; }
+#log-path { height: 2; }
+#log-view { background: #09111c; border: round #2b4059; height: 1fr; padding: 0 1; }
+#settings-form { max-width: 110; padding-right: 2; }
+#settings-form Label { height: auto; margin-top: 1; }
+Input, Select { background: #111f30; border: tall #263c53; }
+Input:focus { border: tall #6ee7d1; }
+ModelDialog, PathDialog { align: center middle; background: #000000 65%; }
+#dialog { width: 82; max-width: 96%; height: auto; max-height: 94%; padding: 1 2; background: #142133; border: round #6ee7d1; }
+#dialog Label { margin-top: 1; }
+.dialog-title { text-style: bold; color: #6ee7d1; height: 2; }
+.error { color: #ff9b9b; height: auto; }
+#path-dialog { width: 78; max-width: 95%; height: auto; padding: 1 2; background: #142133; border: round #6ee7d1; }
