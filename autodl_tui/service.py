@@ -20,6 +20,7 @@ import psutil
 from .adapters import TOOLS
 from .config import CATEGORIES, Config, atomic_json, redact
 from .environment import capabilities
+from .pip_mirrors import select_mirror
 
 
 @contextmanager
@@ -42,12 +43,21 @@ class Service:
         self.adapter = TOOLS[tool_id]
         self.failed = ""
         self.child: subprocess.Popen | None = None
+        self._selected_pip_index = ""
+
+    @property
+    def pip_index(self) -> str:
+        return self._selected_pip_index if self.config.pip_index == "auto" else self.config.pip_index
+
+    async def select_pip_index(self) -> None:
+        if self.config.pip_index == "auto" and not self._selected_pip_index:
+            self._selected_pip_index = await asyncio.to_thread(select_mirror, self.log)
 
     def environment(self) -> dict[str, str]:
         env = {**os.environ, "PYTHONUNBUFFERED": "1", "GIT_TERMINAL_PROMPT": "0",
                "HF_ENDPOINT": self.config.hf_endpoint}
         if self.config.pip_index:
-            env["PIP_INDEX_URL"] = self.config.pip_index
+            env["PIP_INDEX_URL"] = self.pip_index or "https://pypi.org/simple"
             env["PIP_EXTRA_INDEX_URL"] = ""
         # HF libraries may automatically use inherited credentials with HF_ENDPOINT.
         # Keep the TUI's token available for official downloads, but don't leak it to mirrors.
@@ -183,6 +193,7 @@ class Service:
             self.config.base.mkdir(parents=True, exist_ok=True)
             if shutil.disk_usage(self.config.base).free < 4 * 1024**3:
                 raise RuntimeError("剩余空间不足 4 GiB")
+            self._selected_pip_index = ""
             await self.adapter.deploy(self)
             self.failed = ""
 
@@ -260,8 +271,9 @@ class Service:
         if not config.interpreter.exists():
             await self.command([config.python, "-m", "venv", "--system-site-packages", str(config.comfy / ".venv")])
         python = str(config.interpreter)
+        await self.select_pip_index()
         pip = [python, "-m", "pip", "install"]
-        index = ["--index-url", config.pip_index] if config.pip_index else []
+        index = ["--index-url", self.pip_index] if self.pip_index else []
         await self.command([*pip, *index, "--upgrade", "pip"])
         await self.prepare_torch()
         await self.command([*pip, *index, "-r", str(config.comfy / "requirements.txt")], cwd=config.comfy)

@@ -221,7 +221,7 @@ class AutoDLApp(App):
                     with Horizontal(classes="buttons"):
                         yield Button("填入国内源", variant="primary", id="domestic-sources")
                         yield Button("填入官方源", id="official-sources")
-                    yield Static("国内预设：GH-Proxy + GitClone 备用 / HF-Mirror / 清华 PyPI。填入后点击保存。",
+                    yield Static("国内预设：GH-Proxy + GitClone 备用 / HF-Mirror / pip 三源自动测速。填入后点击保存。",
                                  classes="hint")
                     for key, label in (
                         ("root", "数据盘目录"), ("python", "当前工具 Python（WebUI 使用 Python 3.10）"),
@@ -230,7 +230,7 @@ class AutoDLApp(App):
                         ("host", "监听地址：0.0.0.0 / 127.0.0.1"),
                         ("port", "当前工具服务端口"),
                         ("hf_endpoint", "Hugging Face 站点 / 镜像，例如 https://hf-mirror.com"),
-                        ("pip_index", "pip 镜像（默认清华；留空使用环境默认值）"),
+                        ("pip_index", "pip 镜像：auto 测速阿里 / 腾讯 / 清华；也可填固定地址或留空"),
                         ("torch_index", "PyTorch wheel 源（留空优先复用已有 PyTorch）"),
                         ("extra_args", "当前工具附加参数"),
                         ("install_dir", "当前工具安装目录（ComfyUI 留空使用默认）"),

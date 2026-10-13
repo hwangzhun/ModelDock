@@ -27,7 +27,8 @@ def test_child_environment_uses_mirrors_without_implicit_hf_token(tmp_path, monk
     service = Service(Config(root=str(tmp_path)))
     env = service.environment()
     assert env["HF_ENDPOINT"] == DOMESTIC_SOURCES["hf_endpoint"]
-    assert env["PIP_INDEX_URL"] == DOMESTIC_SOURCES["pip_index"]
+    assert DOMESTIC_SOURCES["pip_index"] == "auto"
+    assert env["PIP_INDEX_URL"] == OFFICIAL_SOURCES["pip_index"]  # before a deployment selects a mirror
     assert env["PIP_EXTRA_INDEX_URL"] == ""
     assert "HF_TOKEN" not in env and "HUGGING_FACE_HUB_TOKEN" not in env
     assert env["HF_HUB_DISABLE_IMPLICIT_TOKEN"] == "1"

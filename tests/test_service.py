@@ -113,8 +113,12 @@ async def test_deploy_reuses_existing_source_without_git_pull(service, monkeypat
         commands.append(args)
 
     monkeypatch.setattr(service, "command", command)
+    monkeypatch.setattr("autodl_tui.service.select_mirror", lambda log: "https://mirrors.aliyun.com/pypi/simple")
     await service.deploy()
     assert not any(args[0] == "git" for args in commands)
     assert any("-r" in args for args in commands)
+    requirements = next(args for args in commands if "-r" in args)
+    assert requirements[requirements.index("--index-url") + 1] == "https://mirrors.aliyun.com/pypi/simple"
+    assert service.environment()["PIP_INDEX_URL"] == "https://mirrors.aliyun.com/pypi/simple"
     assert (service.config.state / "model-paths.yaml").exists()
     assert not (service.config.state / "service.json").exists()

@@ -80,6 +80,7 @@ def test_backend_auto_and_explicit_missing(tmp_path, monkeypatch):
 async def test_webui_independent_environment_and_cpu_launch(tmp_path, monkeypatch, tool):
     monkeypatch.setattr('autodl_tui.adapters.capabilities', lambda _: host())
     monkeypatch.setattr('autodl_tui.adapters.python_version', lambda _: (3, 10))
+    monkeypatch.setattr('autodl_tui.service.select_mirror', lambda log: 'https://mirrors.cloud.tencent.com/pypi/simple')
     service = Service(Config(root=str(tmp_path)), tool)
     c = service.config
     c.comfy.mkdir()
@@ -97,6 +98,7 @@ async def test_webui_independent_environment_and_cpu_launch(tmp_path, monkeypatc
     monkeypatch.setattr(service, 'prepare_torch', torch)
     monkeypatch.setattr(service, 'verify_torch', torch)
     await service.adapter.deploy(service)
+    assert service.environment()['PIP_INDEX_URL'] == 'https://mirrors.cloud.tencent.com/pypi/simple'
     assert commands[0] == [c.python, '-m', 'venv', str(c.comfy / '.venv')]
     assert '--exit' in commands[1] and '--skip-torch-cuda-test' in commands[1]
     args = service.adapter.launch(service)

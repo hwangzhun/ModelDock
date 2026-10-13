@@ -11,7 +11,7 @@ for arg in "$@"; do
 done
 export AI_TUI_NETWORK="${MODELDOCK_NETWORK:-${AI_TUI_NETWORK:-}}"
 bootstrap_index="${MODELDOCK_PIP_INDEX:-${AI_TUI_PIP_INDEX:-${AUTODL_PIP_INDEX:-}}}"
-if [[ ! -x .venv/bin/python || ! -f .venv/.modeldock-installed ]]; then
+if [[ ! -x .venv/bin/python || ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, modeldock' 2>/dev/null; then
     if [[ -z "$bootstrap_index" ]]; then
         if [[ -z "${AI_TUI_NETWORK:-}" ]]; then
             configured_network="$("$python_bin" - "$@" <<'PYCONFIG'
@@ -51,7 +51,7 @@ PYCONFIG
             fi
         fi
         case "$AI_TUI_NETWORK" in
-            domestic) bootstrap_index=https://pypi.tuna.tsinghua.edu.cn/simple ;;
+            domestic) bootstrap_index=auto ;;
             official) bootstrap_index=https://pypi.org/simple ;;
             *) echo 'AI_TUI_NETWORK 应为 domestic 或 official' >&2; exit 1 ;;
         esac
@@ -66,6 +66,9 @@ if [[ ! -x .venv/bin/python ]] || ! .venv/bin/python -m pip --version >/dev/null
 fi
 if [[ ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, modeldock' 2>/dev/null; then
     bootstrap_index="${bootstrap_index:-https://pypi.org/simple}"
+    if [[ "$bootstrap_index" == auto ]]; then
+        bootstrap_index="$("$python_bin" "$project_dir/autodl_tui/pip_mirrors.py")"
+    fi
     PIP_INDEX_URL="$bootstrap_index" PIP_EXTRA_INDEX_URL="" \
         .venv/bin/python -m pip install --index-url "$bootstrap_index" -e .
     touch .venv/.modeldock-installed

@@ -19,7 +19,7 @@ DOMESTIC_SOURCES = {
     "repo": "https://gh-proxy.com/https://github.com/Comfy-Org/ComfyUI.git",
     "repo_fallback": "https://gitclone.com/github.com/comfyanonymous/ComfyUI.git",
     "hf_endpoint": "https://hf-mirror.com",
-    "pip_index": "https://pypi.tuna.tsinghua.edu.cn/simple",
+    "pip_index": "auto",
 }
 OFFICIAL_SOURCES = {
     "repo": "https://github.com/Comfy-Org/ComfyUI.git",
@@ -144,7 +144,9 @@ class Config:
         parsed = urlsplit(self.hf_endpoint)
         if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
             raise ValueError("HF 镜像只填写站点地址，不包含路径或参数")
-        for value in (self.repo_fallback, self.pip_index, self.torch_index):
+        if self.pip_index and self.pip_index != "auto":
+            validate_url(self.pip_index)
+        for value in (self.repo_fallback, self.torch_index):
             if value:
                 validate_url(value)
         if self.install_dir and not Path(self.install_dir).expanduser().is_absolute():

@@ -68,6 +68,8 @@ python3 -m venv .venv
 
 `ai-tui`、`autodl-tui`、`python -m modeldock` 和 `python -m autodl_tui` 继续可用。`MODELDOCK_PYTHON` / `MODELDOCK_PIP_INDEX` 可指定启动脚本的 Python 和 pip 源；旧变量 `AI_TUI_*` / `AUTODL_*` 继续支持，新变量优先。自定义 pip 源只控制 TUI 安装，不替代设置中的工具依赖源。
 
+国内模式安装或更新 TUI 依赖前，会并行测试阿里云、腾讯云、清华的 pip 源：读取 setuptools 索引，再下载同一个 wheel 的 256 KiB 样本，选择总耗时最短的可用源。测速结果显示在终端，三个源都失败时停止安装并提示检查网络。`MODELDOCK_PIP_INDEX=具体地址` 可跳过测速固定源，`MODELDOCK_PIP_INDEX=auto` 可显式启用测速；已经安装完整的 TUI 启动时不会重复测速。
+
 有 `/root/autodl-tmp` 时默认使用该数据盘，否则使用 `~/ai-workspace`。可覆盖：
 
 ```bash
@@ -118,7 +120,7 @@ TUI 使用的 Python 与工具的 Python 可以不同。WebUI 的版本要求不
 
 ## 网络和访问
 
-国内方案使用 GH-Proxy、HF-Mirror 和清华 PyPI；官方方案使用对应工具的官方 GitHub 仓库、Hugging Face 和 PyPI。每个工具设置独立仓库与备用地址，失败只尝试已配置备用源；取消不会触发备用下载。WebUI 上游准备步骤还会下载辅助仓库及包，其硬编码地址可能需要服务器能访问官方站点；主仓库加速不代表所有依赖均已加速。
+国内方案使用 GH-Proxy、HF-Mirror 和 pip 三源自动测速；官方方案使用对应工具的官方 GitHub 仓库、Hugging Face 和 PyPI。已有配置保留原来的 pip 地址；在 F4 设置中将 pip 镜像改为 `auto` 并保存，即可在部署 / 修复 ComfyUI、Forge、A1111 依赖前测速，结果写入操作日志。填写固定地址可跳过测速，留空沿用环境配置。一次部署复用所选源，下一次部署重新测速；独立配置的 PyTorch wheel 源不参与测速。小样本结果只反映当时网络，不能保证所有包或大文件下载速度。每个工具设置独立仓库与备用地址，失败只尝试已配置备用源；取消不会触发备用下载。WebUI 上游准备步骤还会下载辅助仓库及包，其硬编码地址可能需要服务器能访问官方站点；主仓库加速不代表所有依赖均已加速。
 
 国内镜像可用性因服务器网络而异，设置可替换为可访问的可信入口；预设填入后保存才生效。`torch_index` 专门控制 PyTorch wheel 源，不根据 GPU 名称猜测 ROCm 版本。
 

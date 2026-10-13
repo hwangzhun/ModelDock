@@ -125,6 +125,7 @@ class ToolAdapter:
             from .config import atomic_json
             atomic_json(c.service_state / 'build.json', {'backend': backend})
         else:
+            await service.select_pip_index()
             if not c.interpreter.exists():
                 await service.command([c.python, '-m', 'venv', str(c.comfy / '.venv')])
             await service.prepare_torch()
