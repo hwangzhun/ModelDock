@@ -96,18 +96,22 @@ async def test_hf_dispatch_arguments_staging_and_atomic_promotion(downloads, fak
     assert not (root / "IQ3_S/model.gguf").exists()
 
 
-async def test_official_auth_and_custom_mirror(downloads, fake_hf, monkeypatch):
+@pytest.mark.parametrize("origin", ["huggingface.co", "hf-mirror.com"])
+async def test_official_auth_and_custom_mirror(downloads, fake_hf, monkeypatch, origin):
     monkeypatch.setenv("HF_TOKEN", "hf_secret")
     downloads.config.hf_endpoint = "https://huggingface.co"
     job = add(downloads)
+    job.model.url = job.model.url.replace("huggingface.co", origin)
 
     def whoami(request):
         assert request.method == "HEAD"
+        assert request.url.host == "huggingface.co"
         assert request.headers["Authorization"] == "Bearer hf_secret"
         return httpx.Response(200, headers={"content-length": "6"})
 
     await transfer(downloads, job, whoami)
     call = json.loads((downloads.config.state / "hf" / job.id / "call.json").read_text())
+    assert call["endpoint"] == "https://huggingface.co"
     assert call["token"] == "hf_secret" and call["username"] is None
     assert "hf_secret" not in (downloads.config.state / "hf-downloads.log").read_text()
 

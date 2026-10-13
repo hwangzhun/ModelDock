@@ -20,6 +20,24 @@ def test_domestic_hf_rewrite_keeps_repo_and_revision(tmp_path):
     assert downloads.request(model)[0] == model.url
 
 
+@pytest.mark.parametrize("origin", ["huggingface.co", "hf-mirror.com"])
+def test_existing_hf_jobs_follow_endpoint_changes(tmp_path, monkeypatch, origin):
+    monkeypatch.setenv("HF_TOKEN", "hf_secret")
+    downloads = Downloads(Config(root=str(tmp_path)))
+    model = Model(f"https://{origin}/owner/repo/resolve/v1/vae/file?download=true", "file")
+    downloads.add([model])
+    job = downloads.jobs[0]
+    downloads.config.hf_endpoint = "https://huggingface.co"
+    url, headers = downloads.request(job.model)
+    assert url == "https://huggingface.co/owner/repo/resolve/v1/vae/file?download=true"
+    assert headers["Authorization"] == "Bearer hf_secret"
+    downloads.config.hf_endpoint = "https://hf-mirror.com"
+    url, headers = downloads.request(job.model)
+    assert url == "https://hf-mirror.com/owner/repo/resolve/v1/vae/file?download=true"
+    assert "Authorization" not in headers
+    assert job.model.url == model.url  # Retrying does not replace the saved URL or job/cache ID.
+
+
 def test_child_environment_uses_mirrors_without_implicit_hf_token(tmp_path, monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "hf_secret")
     monkeypatch.setenv("HUGGING_FACE_HUB_TOKEN", "hf_legacy")

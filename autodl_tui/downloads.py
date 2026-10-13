@@ -175,7 +175,7 @@ class Downloads:
     def request(self, model: Model) -> tuple[str, dict[str, str]]:
         url = model.url
         parsed = urlsplit(url)
-        if parsed.hostname == "huggingface.co":
+        if parsed.hostname in ("huggingface.co", "hf-mirror.com"):
             mirror = urlsplit(self.config.hf_endpoint)
             url = urlunsplit(parsed._replace(scheme=mirror.scheme, netloc=mirror.netloc))
         host = urlsplit(url).hostname
