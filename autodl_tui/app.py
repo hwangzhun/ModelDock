@@ -536,7 +536,7 @@ class AutoDLApp(App):
         self.main_screen.query_one("#access-hint", Static).update(
             f"监听 {c.host}:{port} · 浏览器 http://127.0.0.1:{port}{extra}\n"
             f"SSH 转发（替换地址）：ssh -N -L {port}:127.0.0.1:{port} 用户@服务器 -p SSH端口\n"
-            + ("AutoDL 可在控制台配置自定义服务端口。\n" if Path('/root/autodl-tmp').exists() else "")
+            + ("AutoDL 可在控制台配置自定义服务端口。\n" if os.path.isdir('/root/autodl-tmp') else "")
             + "退出 TUI 保留服务；下载暂停。并行运行前请检查 GPU 显存。")
         for key in ("model", "context", "gpu_layers"):
             self.main_screen.query_one(f"#config-{key}", Input).disabled = self.tool_id != "llamacpp"
