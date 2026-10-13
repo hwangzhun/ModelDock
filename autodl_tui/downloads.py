@@ -16,6 +16,7 @@ import httpx
 
 from .config import CATEGORIES, Config, atomic_json, redact, validate_url
 from .hf import download as hf_download
+from .hf import log as hf_log
 from .hf import selection as hf_selection
 from .service import workspace_lock
 
@@ -109,13 +110,14 @@ class Downloads:
         for row in data:
             model = Model(**row["model"])
             model.validate()
-            job = Job(row["id"], model, row.get("status", "暂停"))
+            job = Job(row["id"], model, row.get("status", "暂停"), error=redact(str(row.get("error", ""))))
             if job.status in ("等待", "下载中", "校验中"):
                 job.status = "暂停"
             self.jobs.append(job)
 
     def save(self) -> None:
-        atomic_json(self.queue_path, [{"id": job.id, "model": asdict(job.model), "status": job.status}
+        atomic_json(self.queue_path, [{"id": job.id, "model": asdict(job.model), "status": job.status,
+                                      "error": redact(job.error)}
                                      for job in self.jobs])
 
     def add(self, models: list[Model]) -> int:
@@ -256,10 +258,14 @@ class Downloads:
                             await self.transfer(client, job)
                         except asyncio.CancelledError:
                             job.status = "暂停"
+                            if urlsplit(job.model.url).hostname in ("huggingface.co", "hf-mirror.com"):
+                                hf_log(self.config.state, f"下载任务取消：{job.model.filename}；保留续传缓存")
                             raise
                         except Exception as error:
                             job.status = "失败"
-                            job.error = redact(str(error))
+                            job.error = redact(str(error) or type(error).__name__)
+                            if urlsplit(job.model.url).hostname in ("huggingface.co", "hf-mirror.com"):
+                                hf_log(self.config.state, f"下载任务失败：{job.model.filename}；{job.error}")
                         finally:
                             job.speed = 0
                             self.active = None

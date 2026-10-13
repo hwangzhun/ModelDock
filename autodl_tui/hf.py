@@ -185,6 +185,7 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
     try:
         while not waiter.done():
             if job.id in downloads.cancelled:
+                log(downloads.config.state, "收到暂停请求，正在停止 hf 进程；保留续传缓存")
                 await stop(proc)
                 job.status = "暂停"
                 return
@@ -198,8 +199,12 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
                     pass
             if source.exists():
                 allocated += source.stat().st_blocks * 512
-            if shutil.disk_usage(target.parent).free < max(0, total - allocated) + 64 * 1024**2:
-                raise ValueError("磁盘剩余空间不足以保存此模型")
+            free = shutil.disk_usage(target.parent).free
+            needed = max(0, total - allocated) + 64 * 1024**2
+            if free < needed:
+                raise ValueError(f"磁盘剩余空间不足以保存此模型：目录 {target.parent}，"
+                                 f"可用 {free / 1024**3:.2f} GiB，还需 {needed / 1024**3:.2f} GiB"
+                                 "（含 64 MiB 预留）；下载已停止，保留续传缓存")
             if reader.done() and reader.exception():
                 raise reader.exception()
             await asyncio.wait({waiter}, timeout=0.2)

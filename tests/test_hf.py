@@ -4,6 +4,7 @@ import json
 import shlex
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 import psutil
@@ -149,6 +150,44 @@ async def test_hf_hash_failure_refetches_on_retry(downloads, fake_hf):
         await transfer(downloads, job)
     assert not downloads.target(job.model).exists()
     assert not (downloads.config.state / "hf" / job.id / "IQ3_S/model.gguf").exists()
+
+
+async def test_failure_reason_is_logged_redacted_and_restored(downloads, monkeypatch):
+    job = add(downloads)
+    monkeypatch.setenv("HF_TOKEN", "hf_failuresecret")
+
+    async def fail(client, selected):
+        raise RuntimeError("连接失败 hf_failuresecret")
+
+    monkeypatch.setattr(downloads, "transfer", fail)
+    await downloads.run()
+    assert job.status == "失败"
+    assert job.error == "连接失败 ***"
+    logs = (downloads.config.state / "hf-downloads.log").read_text()
+    assert "下载任务失败" in logs and "连接失败 ***" in logs
+    assert "hf_failuresecret" not in logs + downloads.queue_path.read_text()
+    restored = Downloads(downloads.config).jobs[0]
+    assert restored.error == job.error
+    assert restored.status == "失败"
+    downloads.retry(job.id)
+    assert Downloads(downloads.config).jobs[0].error == ""
+
+
+async def test_disk_guard_logs_the_reason_before_failure_is_saved(downloads, fake_hf, monkeypatch):
+    async def head(client, url, **kwargs):
+        return httpx.Response(200, headers={"content-length": "6"}, request=httpx.Request("HEAD", url))
+
+    monkeypatch.setattr(httpx.AsyncClient, "head", head)
+    monkeypatch.setattr(hf.shutil, "disk_usage", lambda path: SimpleNamespace(free=0))
+    monkeypatch.setenv("FAKE_HF_MODE", "slow")
+    job = add(downloads)
+    await downloads.run()
+    assert job.status == "失败"
+    assert "可用 0.00 GiB" in job.error
+    assert "还需" in job.error
+    assert job.error in (downloads.config.state / "hf-downloads.log").read_text()
+    assert Downloads(downloads.config).jobs[0].error == job.error
+    assert not downloads.target(job.model).exists()
 
 
 @pytest.mark.parametrize("cancel_task", [False, True])
