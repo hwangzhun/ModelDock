@@ -111,7 +111,7 @@ class PathDialog(ModalScreen[str | None]):
 
 TOOL_FIELDS = ("python", "repo", "repo_fallback", "host", "port", "torch_index", "extra_args",
                "install_dir", "backend", "model", "context", "gpu_layers")
-GLOBAL_FIELDS = ("root", "hf_endpoint", "pip_index", "hfd_threads")
+GLOBAL_FIELDS = ("root", "hf_endpoint", "pip_index")
 
 
 class AutoDLApp(App):
@@ -205,11 +205,11 @@ class AutoDLApp(App):
                     yield Button("继续 / 重试选中项", id="retry-selected")
                     yield Button("暂停选中项", id="pause-selected")
                     yield Button("移出清单", id="remove-selected")
-                yield Static("HF 使用 hfd 多连接下载 · 文件依次下载 · 暂停保留续传文件 · 移出清单不删除文件", classes="hint")
+                yield Static("HF 使用 hf download 下载 · 文件依次下载 · 暂停保留续传文件 · 移出清单不删除文件", classes="hint")
             with TabPane("实时日志", id="logs"):
                 with Horizontal(id="log-toolbar"):
                     yield Select([("当前工具运行日志", "comfyui.log"), ("部署 / 操作日志", "operations.log"),
-                                  ("HF / hfd 下载日志", "hfd-downloads.log")],
+                                  ("HF / hf download 下载日志", "hf-downloads.log")],
                                  value="comfyui.log", allow_blank=False, id="log-source")
                     yield Label("自动滚动")
                     yield Switch(value=True, id="log-follow")
@@ -231,7 +231,6 @@ class AutoDLApp(App):
                         ("host", "监听地址：0.0.0.0 / 127.0.0.1"),
                         ("port", "当前工具服务端口"),
                         ("hf_endpoint", "Hugging Face 站点 / 镜像，例如 https://hf-mirror.com"),
-                        ("hfd_threads", "HF hfd 每文件连接数：1–10（默认 8）"),
                         ("pip_index", "pip 镜像：auto 测速阿里 / 腾讯 / 清华；也可填固定地址或留空"),
                         ("torch_index", "PyTorch wheel 源（留空优先复用已有 PyTorch）"),
                         ("extra_args", "当前工具附加参数"),
@@ -355,7 +354,7 @@ class AutoDLApp(App):
 
     def refresh_log(self) -> None:
         source = str(self.main_screen.query_one("#log-source", Select).value)
-        path = (self.config.state if source == "hfd-downloads.log" else self.service.config.service_state) / source
+        path = (self.config.state if source == "hf-downloads.log" else self.service.config.service_state) / source
         self.main_screen.query_one("#log-path", Static).update(str(path))
         if not self.main_screen.query_one("#log-follow", Switch).value:
             return
@@ -535,7 +534,7 @@ class AutoDLApp(App):
         self.main_screen.query_one("#tool-title", Static).update(self.service.adapter.name + " SERVICE")
         logs = self.main_screen.query_one("#log-source", Select)
         logs.set_options([("当前工具运行日志", self.service.runtime_log), ("部署 / 操作日志", "operations.log"),
-                          ("HF / hfd 下载日志", "hfd-downloads.log")])
+                          ("HF / hf download 下载日志", "hf-downloads.log")])
         logs.value = self.service.runtime_log
         self.last_log = ""
         self.update_gguf_options()
@@ -571,7 +570,6 @@ class AutoDLApp(App):
         if self.busy:
             raise ValueError("请先等待当前操作完成")
         global_values = {key: self.main_screen.query_one(f"#config-{key}", Input).value.strip() for key in GLOBAL_FIELDS}
-        global_values["hfd_threads"] = int(global_values["hfd_threads"])
         values = {key: self.main_screen.query_one(f"#config-{key}", Input).value.strip() for key in TOOL_FIELDS}
         for key in ("port", "context", "gpu_layers"):
             values[key] = int(values[key])

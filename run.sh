@@ -11,7 +11,7 @@ for arg in "$@"; do
 done
 export AI_TUI_NETWORK="${MODELDOCK_NETWORK:-${AI_TUI_NETWORK:-}}"
 bootstrap_index="${MODELDOCK_PIP_INDEX:-${AI_TUI_PIP_INDEX:-${AUTODL_PIP_INDEX:-}}}"
-if [[ ! -x .venv/bin/python || ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, modeldock' 2>/dev/null; then
+if [[ ! -x .venv/bin/python || ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, huggingface_hub, modeldock' 2>/dev/null; then
     if [[ -z "$bootstrap_index" ]]; then
         if [[ -z "${AI_TUI_NETWORK:-}" ]]; then
             configured_network="$("$python_bin" - "$@" <<'PYCONFIG'
@@ -64,7 +64,7 @@ if [[ ! -x .venv/bin/python ]] || ! .venv/bin/python -m pip --version >/dev/null
         exit 1
     }
 fi
-if [[ ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, modeldock' 2>/dev/null; then
+if [[ ! -f .venv/.modeldock-installed ]] || ! .venv/bin/python -c 'import textual, httpx, psutil, huggingface_hub, modeldock' 2>/dev/null; then
     bootstrap_index="${bootstrap_index:-https://pypi.org/simple}"
     if [[ "$bootstrap_index" == auto ]]; then
         bootstrap_index="$("$python_bin" "$project_dir/autodl_tui/pip_mirrors.py")"

@@ -73,7 +73,6 @@ class Config:
     port: int = 6006
     hf_endpoint: str = DOMESTIC_SOURCES["hf_endpoint"]
     pip_index: str = DOMESTIC_SOURCES["pip_index"]
-    hfd_threads: int = 8
     torch_index: str = ""
     extra_args: str = ""
 
@@ -132,8 +131,6 @@ class Config:
         return self.comfy / ".venv" / "bin" / "python"
 
     def validate(self) -> None:
-        if not isinstance(self.hfd_threads, int) or isinstance(self.hfd_threads, bool) or not 1 <= self.hfd_threads <= 10:
-            raise ValueError("hfd 每文件连接数应为 1–10 的整数")
         if not self.root.strip() or not Path(self.root).expanduser().is_absolute():
             raise ValueError("工作目录必须是绝对路径")
         if not isinstance(self.port, int) or isinstance(self.port, bool) or not 1 <= self.port <= 65535:

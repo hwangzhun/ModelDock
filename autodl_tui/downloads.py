@@ -15,8 +15,8 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 import httpx
 
 from .config import CATEGORIES, Config, atomic_json, redact, validate_url
-from .hfd import download as hfd_download
-from .hfd import selection as hfd_selection
+from .hf import download as hf_download
+from .hf import selection as hf_selection
 from .service import workspace_lock
 
 
@@ -276,8 +276,8 @@ class Downloads:
             job.status = "已存在"
             job.downloaded = job.total = target.stat().st_size
             return
-        if hfd_selection(job.model.url):
-            await hfd_download(self, client, job, target)
+        if hf_selection(job.model.url):
+            await hf_download(self, client, job, target)
             return
         partial = Path(str(target) + ".part")
         metadata = Path(str(target) + ".part.json")
