@@ -28,7 +28,7 @@ args = sys.argv[1:]
 root = Path(args[args.index('--local-dir') + 1])
 meta = root / '.cache' / 'huggingface' / 'download'
 meta.mkdir(parents=True, exist_ok=True)
-Path(root / 'call.json').write_text(json.dumps({'args': args, 'endpoint': os.environ['HF_ENDPOINT'], 'token': os.environ.get('HF_TOKEN'), 'username': os.environ.get('HF_USERNAME')}))
+Path(root / 'call.json').write_text(json.dumps({'args': args, 'endpoint': os.environ['HF_ENDPOINT'], 'token': os.environ.get('HF_TOKEN'), 'username': os.environ.get('HF_USERNAME'), 'high_performance': os.environ.get('HF_XET_HIGH_PERFORMANCE'), 'disable_xet': os.environ.get('HF_HUB_DISABLE_XET')}))
 path = 'IQ3_S/model.gguf'
 dest = root / path
 dest.parent.mkdir(exist_ok=True)
@@ -36,6 +36,10 @@ mode = os.environ.get('FAKE_HF_MODE', 'success')
 if mode == 'fail':
  print('network failed', flush=True)
  sys.exit(7)
+if mode == 'too-large':
+ print('Error: Invalid value. The file is too large to be downloaded using the regular download method. Install `hf_xet` with `pip install hf_xet` for xet-powered downloads.', flush=True)
+ print('Hint: set HF_DEBUG=1 as environment variable for full traceback.', flush=True)
+ sys.exit(1)
 if mode == 'missing':
  sys.exit(0)
 if mode == 'slow':
@@ -114,6 +118,24 @@ async def test_hf_failure_never_promotes_target(downloads, fake_hf, monkeypatch,
     job = add(downloads)
     with pytest.raises((RuntimeError, ValueError), match=match):
         await transfer(downloads, job)
+    assert not downloads.target(job.model).exists()
+
+
+@pytest.mark.parametrize("endpoint", ["https://hf-mirror.com", "https://huggingface.co"])
+@pytest.mark.parametrize("disable_xet", ["0", "1", "TRUE"])
+async def test_oversized_http_error_explains_xet_recovery(downloads, fake_hf, monkeypatch,
+                                                       endpoint, disable_xet):
+    monkeypatch.setenv("FAKE_HF_MODE", "too-large")
+    monkeypatch.setenv("HF_HUB_DISABLE_XET", disable_xet)
+    downloads.config.hf_endpoint = endpoint
+    job = add(downloads)
+    with pytest.raises(RuntimeError, match="python -m pip install -U hf_xet") as error:
+        await transfer(downloads, job)
+    assert ("取消此环境变量" in str(error.value)) == (disable_xet != "0")
+    assert ("HF 站点改为" in str(error.value)) == (endpoint != "https://huggingface.co")
+    logs = (downloads.config.state / "hf-downloads.log").read_text()
+    assert "pip install hf_xet" in logs
+    assert "普通 HTTP 下载" in logs
     assert not downloads.target(job.model).exists()
 
 
@@ -201,4 +223,39 @@ async def test_linked_size_overrides_redirect_body_size(downloads, fake_hf):
     job = add(downloads)
     await transfer(downloads, job, lambda r: httpx.Response(
         302, headers={"x-linked-size": "6", "content-length": "0", "location": "https://example.com/blob"}))
+    assert job.status == "完成" and job.total == 6
+
+
+@pytest.mark.parametrize("override,expected", [(None, "1"), ("0", "0")])
+async def test_xet_high_performance_default_and_explicit_override(downloads, fake_hf, monkeypatch, override, expected):
+    if override is None:
+        monkeypatch.delenv("HF_XET_HIGH_PERFORMANCE", raising=False)
+    else:
+        monkeypatch.setenv("HF_XET_HIGH_PERFORMANCE", override)
+    monkeypatch.setenv("HF_HUB_DISABLE_XET", "1")
+    job = add(downloads)
+    await transfer(downloads, job, lambda r: httpx.Response(
+        302, headers={"x-linked-size": "6", "x-xet-hash": "abc", "location": "https://example.com/blob"}))
+    call = json.loads((downloads.config.state / "hf" / job.id / "call.json").read_text())
+    assert call["high_performance"] == expected and call["disable_xet"] == "1"
+    logs = (downloads.config.state / "hf-downloads.log").read_text()
+    assert "服务端 Xet 元数据=有" in logs
+    assert f"HF_XET_HIGH_PERFORMANCE={expected}" in logs
+
+
+async def test_redirect_chain_preserves_xet_metadata(downloads, fake_hf):
+    job = add(downloads)
+
+    def handler(request):
+        if request.url.host == "hf-mirror.com":
+            return httpx.Response(308, headers={"location": str(request.url).replace("hf-mirror.com", "huggingface.co")})
+        if request.url.host == "huggingface.co":
+            return httpx.Response(302, headers={"location": "https://cdn.example.com/blob", "x-linked-size": "6",
+                                                "x-xet-hash": "abc", "content-length": "123"})
+        return httpx.Response(200, headers={"content-length": "6"})
+
+    await transfer(downloads, job, handler)
+    logs = (downloads.config.state / "hf-downloads.log").read_text()
+    assert "服务端 Xet 元数据=有" in logs
+    assert "hf-mirror.com → huggingface.co → cdn.example.com" in logs
     assert job.status == "完成" and job.total == 6

@@ -48,7 +48,8 @@ def command() -> str:
     bundled = Path(sys.executable).parent / "hf"
     executable = str(bundled) if bundled.is_file() and os.access(bundled, os.X_OK) else shutil.which("hf")
     if not executable:
-        raise ValueError("缺少 hf 命令，请在 ModelDock 的 Python 环境执行：pip install 'huggingface_hub>=1,<2'")
+        raise ValueError("缺少 hf 命令，请在 ModelDock 的 Python 环境执行："
+                         "python -m pip install 'huggingface_hub>=1,<2' 'hf_xet>=1.2,<2'")
     return executable
 
 
@@ -114,6 +115,9 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
     env["HF_HUB_DISABLE_IMPLICIT_TOKEN"] = "0" if token else "1"
     env["HF_HUB_DISABLE_UPDATE_CHECK"] = "1"
     env["HF_HUB_DISABLE_PROGRESS_BARS"] = "0"
+    # Xet tunes per-file parallel transfers; CLI max-workers only parallelizes files.
+    # Preserve an explicit opt-out on hosts with limited CPU / disk capacity.
+    env.setdefault("HF_XET_HIGH_PERFORMANCE", "1")
     if token:
         env["HF_TOKEN"] = token
     if job.id in downloads.cancelled:
@@ -123,10 +127,13 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
     response = await client.head(url, headers=headers, follow_redirects=False)
     if not response.is_redirect:
         response.raise_for_status()
+    metadata_responses = [response]
     if response.is_redirect and "x-linked-size" not in response.headers:
         response = await client.head(url, headers=headers, follow_redirects=True)
         response.raise_for_status()
-    size = response.headers.get("x-linked-size", response.headers.get("content-length", ""))
+        metadata_responses.extend([*response.history, response])
+    size = next((r.headers["x-linked-size"] for r in metadata_responses if "x-linked-size" in r.headers),
+                response.headers.get("content-length", ""))
     if not size.isdecimal():
         raise ValueError("HF 未返回文件大小，无法校验下载完整性")
     total = int(size)
@@ -134,6 +141,15 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
     args = [executable, "download", repo, path, "--revision", unquote(revision),
             "--local-dir", str(staging)]
     log(downloads.config.state, f"hf download：{repo}/{path}，站点 {endpoint}")
+    hosts = list(dict.fromkeys(r.url.host for r in metadata_responses))
+    log(downloads.config.state, "HEAD 响应站点：" + " → ".join(hosts))
+    xet_metadata = "有" if any(r.headers.get("x-xet-hash") for r in metadata_responses) else "无"
+    log(downloads.config.state,
+        f"传输诊断：服务端 Xet 元数据={xet_metadata}，"
+        f"HF_XET_HIGH_PERFORMANCE={env['HF_XET_HIGH_PERFORMANCE']}，"
+        f"HF_HUB_DISABLE_XET={env.get('HF_HUB_DISABLE_XET', '0')}")
+    if xet_metadata == "无":
+        log(downloads.config.state, "本次 HEAD 未返回 Xet 元数据；若 CLI 使用普通 HTTP，高性能设置不会增加单文件连接数")
     if Path(str(target) + ".part").exists():
         log(downloads.config.state, "旧版 .part 保留；hf download 使用独立的缓存续传文件，首次从头下载")
     if job.id in downloads.cancelled:
@@ -193,6 +209,15 @@ async def download(downloads, client: httpx.AsyncClient, job, target: Path) -> N
             return
         if proc.returncode:
             details = "；".join(tail[-3:])
+            if any("too large to be downloaded using the regular download method" in line for line in tail):
+                guidance = ("当前使用普通 HTTP 下载，文件超过 hf 的大小限制，需要 Xet；"
+                            "请在运行 hf 的 Python 环境执行 python -m pip install -U hf_xet")
+                if env.get("HF_HUB_DISABLE_XET", "").upper() in ("1", "ON", "YES", "TRUE"):
+                    guidance += "；当前 HF_HUB_DISABLE_XET 已启用，请取消此环境变量并重启 ModelDock"
+                if endpoint != "https://huggingface.co":
+                    guidance += "；若安装后仍失败，请将设置中的 HF 站点改为 https://huggingface.co 后重试"
+                log(downloads.config.state, guidance)
+                details = guidance + "；" + details
             raise RuntimeError(f"hf 下载失败（退出码 {proc.returncode}）：{details}；详情见 hf-downloads.log")
         if (source.is_symlink() or not source.resolve().is_relative_to(staging.resolve())
                 or not source.is_file() or source.stat().st_size != total):

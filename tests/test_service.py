@@ -88,6 +88,15 @@ def test_workspace_lock_and_model_config(service):
     assert existing.read_text() == "user_config: {}"
 
 
+def test_xet_package_names_survive_redaction(monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.delenv("CIVITAI_TOKEN", raising=False)
+    assert redact("pip install hf_xet hf_transfer hf_secret hf_xetABC") == (
+        "pip install hf_xet hf_transfer hf_*** hf_***")
+    monkeypatch.setenv("HF_TOKEN", "hf_xet")
+    assert redact("Bearer hf_xet") == "Bearer ***"
+
+
 def test_config_roundtrip_and_redaction(tmp_path, monkeypatch):
     config = Config(root=str(tmp_path))
     path = tmp_path / "config.json"

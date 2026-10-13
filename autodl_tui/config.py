@@ -58,7 +58,8 @@ def redact(value: str) -> str:
         if token:
             value = value.replace(token, "***")
     value = re.sub(r"(?i)([?&](?:token|access_token|key|api_key)=)[^&\s]+", r"\1***", value)
-    value = re.sub(r"\bhf_[a-zA-Z0-9]+", "hf_***", value)
+    # Keep public package names readable; configured secrets were removed above.
+    value = re.sub(r"\bhf_(?!(?:xet|transfer)\b)[a-zA-Z0-9]+", "hf_***", value)
     return value
 
 

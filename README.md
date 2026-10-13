@@ -138,8 +138,10 @@ ssh -N -L 6006:127.0.0.1:6006 用户@服务器 -p SSH端口
 
 支持 Hugging Face、公开 ModelScope、Civitai 和 HTTP(S) 直链。HF / ModelScope 填写仓库 ID、文件路径及可选 revision。HF 也可填写目录路径（例如 `IQ3_S`），或在直链模式粘贴 `/tree/main/IQ3_S` 目录链接，自动展开目录及子目录中的全部文件；目录下载请留空文件名和 SHA256。所有文件保存到所选分类，存在同名文件的目录需分别选择子目录。分片 GGUF 必须下载全部分片，使用时选择第一片。HF `/blob/` 链接可转换为下载地址；其他站点不解析分享页。
 
-- HF 文件使用官方 [hf download](https://huggingface.co/docs/huggingface_hub/en/guides/cli)，随 ModelDock 安装 `huggingface_hub`，无需 hfd、curl 或 aria2。队列文件依次下载，使用配置中的 HF 站点 / 镜像；暂停停止下载进程，重试使用 Hugging Face 缓存续传。
+- HF 文件使用官方 [hf download](https://huggingface.co/docs/huggingface_hub/en/guides/cli)，随 ModelDock 安装 `huggingface_hub` 和 `hf_xet`，启动脚本会检查并补装缺失依赖，无需 hfd、curl 或 aria2。队列文件依次下载，使用配置中的 HF 站点 / 镜像；暂停停止下载进程，重试使用 Hugging Face 缓存续传。
+- HF 下载默认设置 `HF_XET_HIGH_PERFORMANCE=1`，让支持 Xet 的文件使用高性能传输；已有环境变量设置优先，可用 `HF_XET_HIGH_PERFORMANCE=0` 关闭。不强制覆盖 `HF_HUB_DISABLE_XET`。F3 的 HF 下载日志记录站点、HEAD 响应是否提供 Xet 元数据及相关设置，元数据存在不代表 CLI 已实际使用 Xet。普通 HTTP 回退不支持通过 `--max-workers` 增加单文件连接数；镜像不提供 Xet 或相关存储域名不可达时，高性能设置无法改善这条 HTTP 路径。下载速度仍受服务器带宽、源站、网络线路和磁盘影响。
 - HF 临时数据保存在工作目录 `.autodl-tui/hf/任务ID/`，续传缓存位于其中的 `.cache/huggingface/`；检查完整大小及可选 SHA256 后，才放入 `models/分类/文件名`。F3 可选择「HF / hf download 下载日志」查看进度和报错。
+- 若提示 `too large to be downloaded using the regular download method`，说明 CLI 走了普通 HTTP 并触发大小限制。在 ModelDock 安装目录执行 `.venv/bin/python -m pip install -U hf_xet`，取消 `HF_HUB_DISABLE_XET` 环境变量后重启；若镜像仍触发同一错误，将设置中的 HF 站点改为 `https://huggingface.co` 再重试原任务，保留续传缓存。`hf_xet` 包名不会被日志脱敏成 `hf_***`。
 - 非 HF 文件继续使用 HTTP 下载及 Range / If-Range 续传。旧版 HF `.part` 和 hfd 临时文件保留，不转换为新工具的缓存，切换后首次下载从头开始；旧临时文件可能额外占用磁盘。旧配置中的 `hfd_threads` 自动忽略，界面不再提供 aria2 连接数设置。
 - SHA256 可选，校验通过才生成最终文件；已有同名文件不覆盖。
 - 导入清单不会立即下载；导出继续使用 version 1 格式，兼容原 SDXL 清单。
