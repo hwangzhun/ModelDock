@@ -138,8 +138,10 @@ ssh -N -L 6006:127.0.0.1:6006 用户@服务器 -p SSH端口
 
 支持 Hugging Face、公开 ModelScope、Civitai 和 HTTP(S) 直链。HF / ModelScope 填写仓库 ID、文件路径及可选 revision。HF 也可填写目录路径（例如 `IQ3_S`），或在直链模式粘贴 `/tree/main/IQ3_S` 目录链接，自动展开目录及子目录中的全部文件；目录下载请留空文件名和 SHA256。所有文件保存到所选分类，存在同名文件的目录需分别选择子目录。分片 GGUF 必须下载全部分片，使用时选择第一片。HF `/blob/` 链接可转换为下载地址；其他站点不解析分享页。
 
-- 串行下载、暂停、重试、队列持久化，以及 Range / If-Range 断点续传。
-- `.part` 文件保留续传；服务器不支持安全续传时重新下载。
+- HF 文件使用 HF-Mirror 推荐的社区工具 [hfd](https://gist.github.com/padeoe/697678ab8e528b85a2a7bddafea1fa4f)，通过 aria2 多连接下载，默认每文件 8 个连接；F4 设置可调整为 1–10。队列文件依次下载，暂停会停止 hfd 及其子进程，重试使用 aria2 控制文件续传。
+- 首次 HF 下载自动获取并校验固定版本的 `hfd.sh`，服务器需已有 `bash`、`curl`、`aria2c`（`jq` 可选，用于加快目录解析）。Debian/Ubuntu 可执行 `apt-get update && apt-get install -y curl aria2 jq`。缺少依赖时显示安装提示，不自动修改系统软件包。
+- hfd 临时数据保存在工作目录 `.autodl-tui/hfd/任务ID/`；检查文件清单、完整大小及可选 SHA256 后，才放入 `models/分类/文件名`。F3 可选择「HF / hfd 下载日志」查看进度和报错。
+- 非 HF 文件继续使用 HTTP 下载及 Range / If-Range 续传。旧版 HF `.part` 文件保留，但不转换为 aria2 控制文件，切换到 hfd 的首次下载从头开始；完成的新文件与旧 `.part` 可能同时占用磁盘。
 - SHA256 可选，校验通过才生成最终文件；已有同名文件不覆盖。
 - 导入清单不会立即下载；导出继续使用 version 1 格式，兼容原 SDXL 清单。
 - 移出清单不删除模型和临时文件。分片 GGUF 需要完整下载所有分片。

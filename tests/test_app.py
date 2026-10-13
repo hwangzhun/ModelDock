@@ -86,3 +86,18 @@ async def test_hf_directory_form_queues_both_shards(tmp_path, monkeypatch):
         app.screen.confirm_model()
         await pilot.pause()
         assert [j.model.filename for j in app.downloads.jobs] == ["part1.gguf", "part2.gguf"]
+
+
+async def test_hfd_settings_and_global_download_log(tmp_path):
+    app = AutoDLApp(Config(root=str(tmp_path)), tmp_path / "config.json")
+    async with app.run_test(size=(120, 42)) as pilot:
+        await pilot.press("f4")
+        await pilot.pause()
+        app.query_one("#config-hfd_threads", Input).value = "6"
+        app.save_settings()
+        assert Config.load(tmp_path / "config.json").hfd_threads == 6
+        app.query_one("#tool-select", Select).value = "forge"
+        await pilot.pause()
+        app.query_one("#log-source", Select).value = "hfd-downloads.log"
+        app.refresh_log()
+        assert str(tmp_path / ".autodl-tui/hfd-downloads.log") in str(app.query_one("#log-path", Static).render())
