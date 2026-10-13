@@ -184,6 +184,63 @@ class Downloads:
             headers["Authorization"] = f"Bearer {token}"
         return url, headers
 
+    async def expand(self, model: Model, client: httpx.AsyncClient | None = None) -> list[Model]:
+        """Expand HF folder selections into individual, resumable file jobs."""
+        parsed = urlsplit(model.url)
+        parts = parsed.path.strip("/").split("/")
+        if (parsed.hostname not in ("huggingface.co", "hf-mirror.com") or len(parts) < 4
+                or parts[2] not in ("tree", "resolve")):
+            return [model]
+        explicit = parts[2] == "tree"
+        folder = "/".join(parts[4:])
+        if not explicit and Path(unquote(folder)).suffix:
+            return [model]
+        api = urlunsplit(parsed._replace(
+            path=f"/api/models/{parts[0]}/{parts[1]}/tree/{parts[3]}" + (f"/{folder}" if folder else ""),
+            query="recursive=true&limit=1000", fragment=""))
+        url, headers = self.request(Model(api, "listing"))
+        if client is None:
+            async with httpx.AsyncClient(follow_redirects=True, timeout=30) as owned:
+                return await self.expand(model, owned)
+        models: list[Model] = []
+        seen_pages: set[str] = set()
+        prefix = unquote(folder).rstrip("/")
+        while url:
+            if url in seen_pages:
+                raise ValueError("HF 目录分页重复，请稍后重试")
+            seen_pages.add(url)
+            response = await client.get(url, headers=headers)
+            if response.status_code == 404 and not explicit and len(seen_pages) == 1:
+                # Extensionless files remain supported; the tree endpoint only lists folders.
+                return [model]
+            response.raise_for_status()
+            if model.sha256 or model.filename != unquote(parts[-1]):
+                raise ValueError("HF 目录下载请留空文件名和 SHA256；单文件请填写完整文件路径")
+            rows = response.json()
+            if not isinstance(rows, list):
+                raise ValueError("HF 目录响应格式无效")
+            for row in rows:
+                if row.get("type") != "file":
+                    continue
+                path = row.get("path", "")
+                if prefix and not path.startswith(prefix + "/"):
+                    raise ValueError("HF 返回了所选目录之外的文件")
+                file_url = urlunsplit(parsed._replace(
+                    path=f"/{parts[0]}/{parts[1]}/resolve/{parts[3]}/{quote(path, safe='/')}",
+                    query="", fragment=""))
+                models.append(Model.from_url(file_url, model.category))
+            next_url = response.links.get("next", {}).get("url", "")
+            if next_url and urlsplit(next_url).netloc != urlsplit(url).netloc:
+                raise ValueError("HF 目录分页地址不属于当前站点")
+            if next_url and urlsplit(next_url).scheme != urlsplit(url).scheme:
+                raise ValueError("HF 目录分页协议发生变化")
+            url = next_url
+        if not models:
+            raise ValueError("HF 目录中没有可下载的文件")
+        if len({m.filename for m in models}) != len(models):
+            raise ValueError("HF 目录含有同名文件，请分别选择子目录或具体文件")
+        return models
+
     async def run(self) -> None:
         if self.running:
             return
@@ -234,6 +291,9 @@ class Downloads:
                 # Conservative restart: do not assume a partial file is complete from length alone.
                 metadata.unlink(missing_ok=True)
                 raise ValueError("服务器拒绝续传范围；再次重试将从头下载")
+            if response.status_code == 404:
+                raise ValueError("下载地址不存在（HTTP 404）；仓库路径必须指向具体文件。"
+                                 "若填写的是 IQ3_S 等目录，请移除此任务，再添加 HF 目录链接以展开文件清单")
             response.raise_for_status()
             if "text/html" in response.headers.get("content-type", "").lower():
                 raise ValueError("收到网页而非模型文件，请检查下载链接、访问权限或登录令牌")

@@ -44,10 +44,10 @@ class ModelDialog(ModalScreen[Model | None]):
                           ("Hugging Face 仓库（使用设置中的镜像）", "huggingface"),
                           ("直链 / Civitai", "url")], value="modelscope", allow_blank=False, id="source")
             yield Label("文件下载地址（直链模式）")
-            yield Input(placeholder="https://…/model.safetensors", id="model-url")
+            yield Input(placeholder="https://…/model.safetensors 或 HF /tree/ 目录链接", id="model-url")
             yield Label("仓库 ID / 文件路径（仓库模式）")
             yield Input(placeholder="例如：Qwen/Qwen-Image", id="repo-id")
-            yield Input(placeholder="仓库内文件路径，例如 split_files/vae/model.safetensors", id="repo-file")
+            yield Input(placeholder="文件路径；HF 也支持目录，例如 IQ3_S（展开所有文件）", id="repo-file")
             yield Input(placeholder="版本（留空：HF main / ModelScope master）", id="revision")
             yield Label("保存分类 / 文件名")
             yield Select([(name, name) for name in CATEGORIES], value="checkpoints", allow_blank=False,
@@ -388,12 +388,17 @@ class AutoDLApp(App):
 
     def add_model(self, model: Model | None) -> None:
         if model:
-            try:
-                count = self.downloads.add([model])
-                self.message("已加入队列" if count else "同名目标已在清单中，请选中后继续或移除")
-                self.start_downloads()
-            except (OSError, ValueError) as error:
-                self.message(str(error), True)
+            self.run_worker(self.prepare_models(model), group="model-listing")
+
+    async def prepare_models(self, model: Model) -> None:
+        try:
+            self.message("正在解析模型文件清单…")
+            models = await self.downloads.expand(model)
+            count = self.downloads.add(models)
+            self.message(f"已加入 {count} 个文件" if count else "同名目标已在清单中，请选中后继续或移除")
+            self.start_downloads()
+        except Exception as error:
+            self.message(redact(str(error)), True)
 
     def start_downloads(self) -> None:
         if not self.downloads.running:

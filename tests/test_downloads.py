@@ -181,6 +181,72 @@ def test_source_builders_and_hf_page_conversion():
     assert model.filename == "x.safetensors"
 
 
+@pytest.mark.parametrize("route", ["tree", "resolve"])
+async def test_hf_directory_expands_all_shards_using_mirror(downloads, route):
+    model = Model.from_url(f"https://huggingface.co/a/b/{route}/main/IQ3_S", "gguf")
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        assert request.url.host == "hf-mirror.com"
+        assert request.url.path == "/api/models/a/b/tree/main/IQ3_S"
+        assert request.url.params["recursive"] == "true"
+        assert "Authorization" not in request.headers
+        if "cursor" not in request.url.params:
+            return httpx.Response(200, json=[
+                {"type": "directory", "path": "IQ3_S/sub"},
+                {"type": "file", "path": "IQ3_S/model-00001-of-00002.gguf"},
+            ], headers={"Link": '<https://hf-mirror.com/api/models/a/b/tree/main/IQ3_S?recursive=true&cursor=2>; rel="next"'})
+        return httpx.Response(200, json=[
+            {"type": "file", "path": "IQ3_S/model-00002-of-00002.gguf"}])
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        models = await downloads.expand(model, client)
+    assert len(requests) == 2
+    assert [m.filename for m in models] == ["model-00001-of-00002.gguf", "model-00002-of-00002.gguf"]
+    assert all(m.category == "gguf" and "/resolve/main/IQ3_S/" in m.url for m in models)
+    assert downloads.add(models) == 2
+
+
+async def test_hf_file_does_not_need_listing(downloads):
+    model = Model.from_url("https://hf-mirror.com/a/b/resolve/main/model.gguf", "gguf")
+    assert await downloads.expand(model) == [model]
+
+
+async def test_hf_extensionless_file_falls_back(downloads):
+    model = Model.from_url("https://hf-mirror.com/a/b/resolve/main/LICENSE", "gguf")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(404))) as client:
+        assert await downloads.expand(model, client) == [model]
+
+
+@pytest.mark.parametrize("rows,match", [
+    ([], "没有"),
+    ([{"type": "file", "path": "elsewhere/file.gguf"}], "之外"),
+    ([{"type": "file", "path": "IQ3_S/a/file.gguf"},
+      {"type": "file", "path": "IQ3_S/b/file.gguf"}], "同名"),
+])
+async def test_invalid_hf_directory_does_not_add_partial_queue(downloads, rows, match):
+    model = Model.from_url("https://hf-mirror.com/a/b/tree/main/IQ3_S", "gguf")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, json=rows))) as client:
+        with pytest.raises(ValueError, match=match):
+            await downloads.expand(model, client)
+    assert not downloads.jobs
+
+
+async def test_hf_directory_rejects_external_pagination(downloads):
+    model = Model.from_url("https://hf-mirror.com/a/b/tree/main/IQ3_S", "gguf")
+    response = httpx.Response(200, json=[], headers={"Link": '<https://evil.com/list>; rel="next"'})
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: response)) as client:
+        with pytest.raises(ValueError, match="站点"):
+            await downloads.expand(model, client)
+
+
+async def test_404_explains_directory_selection(downloads):
+    job = add(downloads)
+    with pytest.raises(ValueError, match="HTTP 404"):
+        await transfer(downloads, job, lambda r: httpx.Response(404))
+
+
 def test_tokens_only_go_to_official_https_origin(downloads, monkeypatch):
     monkeypatch.setenv("HF_TOKEN", "hf_secret")
     downloads.config.hf_endpoint = "https://huggingface.co"

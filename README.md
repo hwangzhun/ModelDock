@@ -134,7 +134,7 @@ ssh -N -L 6006:127.0.0.1:6006 用户@服务器 -p SSH端口
 
 模型独立于源码存放在 `models/分类/文件名`。ComfyUI 通过额外模型路径 YAML 使用模型；Forge/A1111 通过路径参数共享 checkpoints、vae、loras、embeddings。GGUF 独立存放在 `models/gguf`。共享路径不会让不同工具自动兼容所有模型格式或工作流，也不会覆盖用户已有模型目录。
 
-支持 Hugging Face、公开 ModelScope、Civitai 和 HTTP(S) 直链。HF / ModelScope 填写仓库 ID、文件路径及可选 revision；分片文件逐个加入清单。HF `/blob/` 链接可转换为下载地址；其他站点不解析分享页。
+支持 Hugging Face、公开 ModelScope、Civitai 和 HTTP(S) 直链。HF / ModelScope 填写仓库 ID、文件路径及可选 revision。HF 也可填写目录路径（例如 `IQ3_S`），或在直链模式粘贴 `/tree/main/IQ3_S` 目录链接，自动展开目录及子目录中的全部文件；目录下载请留空文件名和 SHA256。所有文件保存到所选分类，存在同名文件的目录需分别选择子目录。分片 GGUF 必须下载全部分片，使用时选择第一片。HF `/blob/` 链接可转换为下载地址；其他站点不解析分享页。
 
 - 串行下载、暂停、重试、队列持久化，以及 Range / If-Range 断点续传。
 - `.part` 文件保留续传；服务器不支持安全续传时重新下载。
